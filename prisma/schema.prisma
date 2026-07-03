@@ -1,0 +1,211 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Organization {
+  id             String         @id @default(cuid())
+  name           String
+  createdAt      DateTime       @default(now())
+  users          User[]
+  teams          Team[]
+  meetings       Meeting[]
+  conversations  Conversation[]
+}
+
+model User {
+  id                String       @id @default(cuid())
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  organizationId    String
+  name              String
+  email             String       @unique
+  passwordHash      String
+  role              UserRole     @default(EMPLOYEE)
+  avatarUrl         String?
+  createdAt         DateTime     @default(now())
+  teams             Team[]       @relation("TeamMembers")
+  channelMembers    ChannelMember[]
+  conversationMembers ConversationMember[]
+  messages          Message[]
+  meetingParticipants MeetingParticipant[]
+  createdMeetings   Meeting[]    @relation("CreatedMeetings")
+  notifications     Notification[]
+  reminders         Reminder[]
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+model Team {
+  id             String          @id @default(cuid())
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  organizationId String
+  name           String
+  description    String?
+  createdAt      DateTime        @default(now())
+  channels       Channel[]
+  members        User[]          @relation("TeamMembers")
+}
+
+model Channel {
+  id            String          @id @default(cuid())
+  team          Team            @relation(fields: [teamId], references: [id])
+  teamId        String
+  name          String
+  type          ChannelType     @default(PUBLIC)
+  createdAt     DateTime        @default(now())
+  members       ChannelMember[]
+  messages      Message[]
+  pinnedMessages PinnedMessage[]
+  meetings      Meeting[]
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+}
+
+model PinnedMessage {
+  id         String   @id @default(cuid())
+  channel    Channel  @relation(fields: [channelId], references: [id])
+  channelId  String
+  message    Message  @relation(fields: [messageId], references: [id])
+  messageId  String   @unique
+  pinnedAt   DateTime @default(now())
+
+  @@unique([channelId, messageId])
+}
+
+model ChannelMember {
+  id        String   @id @default(cuid())
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  channelId String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  joinedAt  DateTime @default(now())
+  role      MemberRole @default(MEMBER)
+
+  @@unique([channelId, userId])
+}
+
+enum MemberRole {
+  MEMBER
+  OWNER
+}
+
+model Conversation {
+  id             String               @id @default(cuid())
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  organizationId String
+  isGroup        Boolean              @default(false)
+  name           String?
+  createdAt      DateTime             @default(now())
+  members        ConversationMember[]
+  messages       Message[]
+}
+
+model ConversationMember {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String
+  joinedAt       DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  sender         User     @relation(fields: [senderId], references: [id])
+  senderId       String
+  channel        Channel? @relation(fields: [channelId], references: [id])
+  channelId      String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+  conversationId String?
+  content        String
+  createdAt      DateTime @default(now())
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  attachments    Attachment[]
+  pinnedMessage  PinnedMessage?
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  message   Message  @relation(fields: [messageId], references: [id])
+  messageId String
+  fileUrl   String
+  fileName  String
+  fileType  String
+  fileSize  Int
+  createdAt DateTime @default(now())
+}
+
+model Meeting {
+  id             String              @id @default(cuid())
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  organizationId String
+  channel        Channel?            @relation(fields: [channelId], references: [id])
+  channelId      String?
+  title          String
+  description    String?
+  startTime      DateTime
+  endTime        DateTime
+  createdBy      User                @relation("CreatedMeetings", fields: [createdById], references: [id])
+  createdById    String
+  createdAt      DateTime            @default(now())
+  participants   MeetingParticipant[]
+}
+
+model MeetingParticipant {
+  id          String       @id @default(cuid())
+  meeting     Meeting      @relation(fields: [meetingId], references: [id])
+  meetingId   String
+  user        User         @relation(fields: [userId], references: [id])
+  userId      String
+  rsvpStatus  RsvpStatus   @default(PENDING)
+
+  @@unique([meetingId, userId])
+}
+
+enum RsvpStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  type      String
+  payload   Json
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Reminder {
+  id           String    @id @default(cuid())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       String
+  title        String
+  message      String?
+  dueAt        DateTime?
+  isCompleted  Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, isCompleted])
+}

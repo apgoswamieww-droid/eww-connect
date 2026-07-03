@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EWW Connect
 
-## Getting Started
+Internal collaboration MVP for IT teams. The app currently includes JWT auth, refresh-token rotation, team channels, direct/group conversations, realtime chat, notifications, reminders, meeting records, and attachment metadata.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 App Router
+- React 19
+- Prisma 7 with Postgres
+- Socket.io realtime server
+- Node test runner
+- Tailwind CSS
+
+## Environment
+
+Create `.env` with:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+DATABASE_URL="postgresql://postgres:password@localhost:5432/eww_connect"
+JWT_SECRET="replace-me"
+REFRESH_TOKEN_SECRET="replace-me-too"
+NEXT_PUBLIC_SOCKET_URL="http://localhost:4000"
+SOCKET_URL="http://localhost:4000"
+CLIENT_ORIGIN="http://localhost:3000"
+SOCKET_PORT="4000"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Use strong secrets outside local development.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run prisma:generate
+npm run prisma:migrate
+```
 
-## Learn More
+Run the web app and Socket.io server in separate terminals:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run dev:web
+npm run dev:server
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open `http://localhost:3000`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Verification
 
-## Deploy on Vercel
+```bash
+npm run lint
+npm test
+npm run build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`npm test` expects a reachable Postgres database from `DATABASE_URL`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Auth Model
+
+- Login/signup return a short-lived access token and set a long-lived refresh token in an httpOnly cookie.
+- Client REST calls send `Authorization: Bearer <access-token>`.
+- Socket.io connections authenticate with the same access token.
+- Protected routes derive user identity from the token and reject spoofed `userId`, `senderId`, `createdById`, and cross-organization access.
+
+## Current Gaps
+
+- File support records attachment metadata only; binary upload/storage is not implemented yet.
+- Realtime tests are still integration-level candidates; current tests cover service behavior and protected route authorization.
+- Refresh-token blacklist/revocation is not persisted yet; logout clears the browser cookie/token.
