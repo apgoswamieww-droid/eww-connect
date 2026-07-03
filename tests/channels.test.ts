@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import prisma from "../app/lib/prisma";
 import { signupUser } from "../app/auth/auth";
-import { createChannel, createTeam, listChannels, listTeams } from "../app/channels/channels";
+import { createChannel, createTeam, listChannels, listTeams } from "../app/lib/data/channels";
 
 test("teams and channels can be created and listed", async () => {
   const user = await signupUser({

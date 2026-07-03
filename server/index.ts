@@ -22,6 +22,10 @@ type ClientToServerEvents = {
   "chat:message": (payload: SocketMessagePayload) => void;
   "notification:created": (payload: NotificationPayload) => void;
   "notification:updated": (payload: NotificationPayload) => void;
+  "typing:start": (payload: { conversationId: string; userId: string; name: string }) => void;
+  "typing:stop": (payload: { conversationId: string; userId: string }) => void;
+  "reaction:added": (payload: ReactionPayload) => void;
+  "reaction:removed": (payload: ReactionPayload) => void;
 };
 
 type ServerToClientEvents = {
@@ -29,6 +33,12 @@ type ServerToClientEvents = {
   "chat:message": (payload: ChatMessage) => void;
   "notification:created": (payload: NotificationPayload) => void;
   "notification:updated": (payload: NotificationPayload) => void;
+  "typing:start": (payload: { conversationId: string; userId: string; name: string }) => void;
+  "typing:stop": (payload: { conversationId: string; userId: string }) => void;
+  "user:online": (payload: { userId: string }) => void;
+  "user:offline": (payload: { userId: string }) => void;
+  "reaction:added": (payload: Record<string, unknown>) => void;
+  "reaction:removed": (payload: Record<string, unknown>) => void;
 };
 
 type ChatMessage = {
@@ -41,6 +51,12 @@ type SocketMessagePayload = { message: ChatMessage };
 
 type NotificationPayload = {
   userId?: string;
+  [key: string]: unknown;
+};
+
+type ReactionPayload = {
+  messageId?: string;
+  message?: { conversationId?: string; channelId?: string };
   [key: string]: unknown;
 };
 
@@ -102,6 +118,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   },
 });
 
+const onlineUsers = new Set<string>();
+
 // JWT verification middleware
 io.use((socket: AuthenticatedSocket, next) => {
   const token = socket.handshake.auth?.token;
@@ -124,20 +142,28 @@ io.use((socket: AuthenticatedSocket, next) => {
 });
 
 io.on("connection", (socket: AuthenticatedSocket) => {
-  console.log(`Socket connected: ${socket.id} (userId: ${socket.userId})`);
+  const uid = socket.userId;
+  console.log(`Socket connected: ${socket.id} (userId: ${uid})`);
+
+  if (uid && !onlineUsers.has(uid)) {
+    onlineUsers.add(uid);
+    io.emit("user:online", { userId: uid });
+  }
 
   socket.on("join", ({ userId }: { userId: string }) => {
-    // Verify user is joining their own room
     if (socket.userId !== userId) {
       socket.emit("error", "Unauthorized: cannot join another user's room");
       return;
     }
     const room = `user:${userId}`;
     socket.join(room);
+    if (!onlineUsers.has(userId)) {
+      onlineUsers.add(userId);
+      io.emit("user:online", { userId });
+    }
   });
 
   socket.on("leave", ({ userId }: { userId: string }) => {
-    // Verify user is leaving their own room
     if (socket.userId !== userId) {
       socket.emit("error", "Unauthorized: cannot leave another user's room");
       return;
@@ -209,8 +235,43 @@ io.on("connection", (socket: AuthenticatedSocket) => {
     if (userId) io.to(`user:${userId}`).emit("notification:updated", n);
   });
 
+  socket.on("typing:start", (payload) => {
+    const { conversationId, userId, name } = payload;
+    if (!conversationId || !userId || userId !== socket.userId) return;
+    socket.to(`conversation:${conversationId}`).emit("typing:start", { conversationId, userId, name });
+  });
+
+  socket.on("typing:stop", (payload) => {
+    const { conversationId, userId } = payload;
+    if (!conversationId || !userId || userId !== socket.userId) return;
+    socket.to(`conversation:${conversationId}`).emit("typing:stop", { conversationId, userId });
+  });
+
+  socket.on("reaction:added", (payload: ReactionPayload) => {
+    const convId = payload.message?.conversationId;
+    if (convId) io.to(`conversation:${convId}`).emit("reaction:added", payload);
+    const channelId = payload.message?.channelId;
+    if (channelId) io.to(`channel:${channelId}`).emit("reaction:added", payload);
+  });
+
+  socket.on("reaction:removed", (payload: ReactionPayload) => {
+    const convId = payload.message?.conversationId;
+    if (convId) io.to(`conversation:${convId}`).emit("reaction:removed", payload);
+    const channelId = payload.message?.channelId;
+    if (channelId) io.to(`channel:${channelId}`).emit("reaction:removed", payload);
+  });
+
   socket.on("disconnect", () => {
-    console.log(`Socket disconnected: ${socket.id} (userId: ${socket.userId})`);
+    console.log(`Socket disconnected: ${socket.id} (userId: ${uid})`);
+    if (uid) {
+      const stillConnected = Array.from(io.sockets.sockets.values()).some(
+        (s) => (s as AuthenticatedSocket).userId === uid && s.id !== socket.id,
+      );
+      if (!stillConnected) {
+        onlineUsers.delete(uid);
+        io.emit("user:offline", { userId: uid });
+      }
+    }
   });
 });
 

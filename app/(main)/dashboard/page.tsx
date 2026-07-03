@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getAuthHeaders, initializeTokenRefresh } from "../lib/tokenManager";
+import { getAuthHeaders, initializeTokenRefresh } from "../../lib/tokenManager";
 
 type StoredUser = {
   id: string;
@@ -77,17 +77,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!user) {
-    return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="text-3xl font-semibold text-white">Dashboard</h1>
-        <p className="mt-3 text-slate-300">Please sign in to view your workspace.</p>
-        <Link className="mt-6 inline-flex rounded bg-sky-600 px-4 py-2 text-white" href="/login">
-          Sign in
-        </Link>
-      </main>
-    );
-  }
+  if (!user) return null;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -96,7 +86,7 @@ export default function Dashboard() {
           <h1 className="text-3xl font-semibold text-white">Dashboard</h1>
           <p className="mt-1 text-slate-300">Welcome back, {user.name}.</p>
         </div>
-        <Link className="rounded bg-sky-600 px-4 py-2 text-white" href={`/chat?userId=${encodeURIComponent(user.id)}`}>
+        <Link className="rounded bg-sky-600 px-4 py-2 text-white" href="/chat">
           Open chat
         </Link>
       </div>

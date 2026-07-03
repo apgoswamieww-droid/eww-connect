@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createNotification, listNotifications, markNotificationRead } from "../../../notifications/notifications";
+import { createNotification, listNotifications, markNotificationRead } from "../../../lib/data/notifications";
 import { errorResponse, requireAuth, requireNotificationOwner } from "../../../lib/apiAuth";
 
 export async function GET(request: Request) {

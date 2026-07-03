@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createTeam, listTeams } from "../../../../channels/channels";
+import { createTeam, listTeams } from "../../../../lib/data/channels";
 import { errorResponse, requireAuth, requireOrganizationAccess } from "../../../../lib/apiAuth";
 
 export async function GET(request: Request) {

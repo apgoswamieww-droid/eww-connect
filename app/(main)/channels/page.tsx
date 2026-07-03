@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getAuthHeaders } from "../lib/tokenManager";
+import { getAuthHeaders } from "../../lib/tokenManager";
 
 type StoredUser = {
   id: string;
@@ -135,17 +134,7 @@ export default function ChannelsPage() {
     );
   }
 
-  if (!user) {
-    return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="text-3xl font-semibold text-white">Channels</h1>
-        <p className="mt-3 text-slate-300">Please sign in to view channels.</p>
-        <Link className="mt-6 inline-flex rounded bg-sky-600 px-4 py-2 text-white" href="/login">
-          Sign in
-        </Link>
-      </main>
-    );
-  }
+
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">

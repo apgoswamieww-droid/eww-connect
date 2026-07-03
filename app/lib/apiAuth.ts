@@ -8,6 +8,7 @@ export type AuthSession = {
   userId: string;
   email: string;
   organizationId: string;
+  role: string;
 };
 
 type AccessTokenPayload = {
@@ -61,7 +62,7 @@ export async function requireAuth(request: Request): Promise<AuthSession> {
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.sub },
-    select: { id: true, email: true, organizationId: true },
+    select: { id: true, email: true, organizationId: true, role: true },
   });
 
   if (!user) {
@@ -72,6 +73,7 @@ export async function requireAuth(request: Request): Promise<AuthSession> {
     userId: user.id,
     email: user.email,
     organizationId: user.organizationId,
+    role: user.role,
   };
 }
 

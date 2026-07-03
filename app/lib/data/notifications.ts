@@ -1,6 +1,7 @@
-import prisma from "../lib/prisma";
+import prisma from "../prisma";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
+import { sendEmail } from "../email";
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 
@@ -22,6 +23,16 @@ export async function createNotification(input: z.infer<typeof createNotificatio
   });
 
   tryEmitNotificationEvent("notification:created", notification);
+
+  // best-effort email notification
+  try {
+    const user = await prisma.user.findUnique({ where: { id: parsed.userId }, select: { email: true, name: true } });
+    if (user) {
+      const payloadStr = typeof parsed.payload === "object" && parsed.payload ? JSON.stringify(parsed.payload) : "";
+      await sendEmail(user.email, `EWW Connect: ${parsed.type}`, `Hi ${user.name},\n\nYou have a new notification: ${parsed.type}${payloadStr ? `\n${payloadStr}` : ""}\n\nView it at: ${process.env.CLIENT_ORIGIN ?? "http://localhost:3000"}/notifications`);
+    }
+  } catch {}
+
   return notification;
 }
 

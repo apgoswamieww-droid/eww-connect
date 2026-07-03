@@ -1,4 +1,4 @@
-import prisma from "../lib/prisma";
+import prisma from "../prisma";
 import { z } from "zod";
 
 export const createReminderSchema = z.object({
@@ -32,5 +32,18 @@ export async function markReminderCompleted(id: string) {
   return prisma.reminder.update({
     where: { id },
     data: { isCompleted: true },
+  });
+}
+
+export async function updateReminder(id: string, data: { title?: string; message?: string; dueAt?: Date | null }) {
+  return prisma.reminder.update({
+    where: { id },
+    data,
+  });
+}
+
+export async function deleteReminder(id: string) {
+  return prisma.reminder.delete({
+    where: { id },
   });
 }

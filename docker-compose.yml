@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: eww_connect
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+      - "3333:3333"
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/eww_connect
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-dev-refresh-secret-change-in-production}
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:3333
+      SOCKET_URL: http://localhost:3333
+      CLIENT_ORIGIN: http://localhost:3000
+      SOCKET_PORT: "3333"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

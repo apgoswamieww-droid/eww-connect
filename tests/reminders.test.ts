@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { signupUser } from "../app/auth/auth";
-import { createReminder, listReminders, markReminderCompleted } from "../app/reminders/reminders";
+import { createReminder, listReminders, markReminderCompleted } from "../app/lib/data/reminders";
 
 test("reminders can be created, listed, and completed", async () => {
   const user = await signupUser({

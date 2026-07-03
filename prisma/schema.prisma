@@ -10,6 +10,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Organization {
@@ -40,6 +41,7 @@ model User {
   createdMeetings   Meeting[]    @relation("CreatedMeetings")
   notifications     Notification[]
   reminders         Reminder[]
+  reactions         MessageReaction[]
 }
 
 enum UserRole {
@@ -140,6 +142,7 @@ model Message {
   editedAt       DateTime?
   deletedAt      DateTime?
   attachments    Attachment[]
+  reactions      MessageReaction[]
   pinnedMessage  PinnedMessage?
 }
 
@@ -152,6 +155,18 @@ model Attachment {
   fileType  String
   fileSize  Int
   createdAt DateTime @default(now())
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  message   Message  @relation(fields: [messageId], references: [id])
+  messageId String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId, emoji])
 }
 
 model Meeting {

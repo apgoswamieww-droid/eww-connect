@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import NotificationsPanel from "../components/NotificationsPanel";
+import NotificationsPanel from "../../components/NotificationsPanel";
 import ChatClient from "./ChatClient";
 
 type StoredUser = {
@@ -38,17 +37,7 @@ export default function ChatPage() {
     );
   }
 
-  if (!user) {
-    return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="text-3xl font-semibold text-white">Chat</h1>
-        <p className="mt-3 text-slate-300">Please sign in to use chat.</p>
-        <Link className="mt-6 inline-flex rounded bg-sky-600 px-4 py-2 text-white" href="/login">
-          Sign in
-        </Link>
-      </main>
-    );
-  }
+  if (!user) return null;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">

@@ -1,4 +1,4 @@
-import prisma from "../lib/prisma";
+import prisma from "../prisma";
 import { z } from "zod";
 
 export const createMeetingSchema = z.object({
@@ -43,8 +43,26 @@ export async function listMeetings(organizationId: string) {
   return prisma.meeting.findMany({
     where: { organizationId },
     include: {
-      participants: true,
+      participants: {
+        include: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      },
+      createdBy: {
+        select: { id: true, name: true },
+      },
     },
     orderBy: { startTime: "asc" },
+  });
+}
+
+export async function updateRsvp(meetingId: string, userId: string, status: "ACCEPTED" | "DECLINED") {
+  return prisma.meetingParticipant.update({
+    where: {
+      meetingId_userId: { meetingId, userId },
+    },
+    data: { rsvpStatus: status },
   });
 }

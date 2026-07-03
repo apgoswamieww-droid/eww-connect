@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createReminder, listReminders, markReminderCompleted } from "../../../reminders/reminders";
+import { createReminder, listReminders, markReminderCompleted } from "../../../lib/data/reminders";
 import { errorResponse, requireAuth, requireReminderOwner } from "../../../lib/apiAuth";
 
 export async function GET(request: Request) {

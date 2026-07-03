@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { signupSchema, signupUser } from "../../../../auth/auth";
+import { checkRateLimit } from "../../../../lib/rateLimit";
 
 export async function POST(request: Request) {
   try {
+    const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+    if (!checkRateLimit(`signup:${ip}`, 5, 60000)) {
+      return NextResponse.json({ success: false, error: "Too many requests" }, { status: 429 });
+    }
     const body = await request.json();
     const result = signupSchema.parse(body);
     const data = await signupUser(result);

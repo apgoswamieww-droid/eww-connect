@@ -1,4 +1,4 @@
-import prisma from "../lib/prisma";
+import prisma from "../prisma";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 
@@ -121,18 +121,63 @@ export async function sendMessage(input: z.infer<typeof sendMessageSchema>) {
   return message;
 }
 
-export async function listMessages(conversationId: string) {
-  return prisma.message.findMany({
+export async function listMessages(conversationId: string, cursor?: string, limit = 50) {
+  const messages = await prisma.message.findMany({
     where: { conversationId },
     include: {
       sender: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
+        select: { id: true, name: true, email: true },
+      },
+      reactions: {
+        include: { user: { select: { id: true, name: true } } },
       },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
+  const hasMore = messages.length > limit;
+  if (hasMore) messages.pop();
+  return { messages: messages.reverse(), hasMore };
+}
+
+export async function searchMessages(userId: string, query: string, limit = 20) {
+  return prisma.message.findMany({
+    where: {
+      conversation: {
+        members: { some: { userId } },
+      },
+      content: { contains: query, mode: "insensitive" },
+      deletedAt: null,
+    },
+    include: {
+      sender: { select: { id: true, name: true } },
+      conversation: { select: { id: true, name: true, isGroup: true, members: { include: { user: { select: { id: true, name: true } } } } } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+}
+
+export async function editMessage(messageId: string, content: string) {
+  const message = await prisma.message.update({
+    where: { id: messageId },
+    data: { content, editedAt: new Date() },
+    include: {
+      sender: {
+        select: { id: true, name: true, email: true },
+      },
+    },
+  });
+  tryEmitSocketEvent("chat:message", { message });
+  return message;
+}
+
+export async function deleteMessage(messageId: string) {
+  const message = await prisma.message.update({
+    where: { id: messageId },
+    data: { content: "[deleted]", deletedAt: new Date() },
+  });
+  tryEmitSocketEvent("chat:message", { message });
+  return message;
 }

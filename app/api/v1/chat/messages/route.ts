@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listMessages, sendMessage } from "../../../../chat/chat";
+import { listMessages, sendMessage } from "../../../../lib/data/chat";
 import { errorResponse, requireAuth, requireConversationMember } from "../../../../lib/apiAuth";
 
 export async function GET(request: Request) {
@@ -14,8 +14,10 @@ export async function GET(request: Request) {
 
     await requireConversationMember(session, conversationId);
 
-    const messages = await listMessages(conversationId);
-    return NextResponse.json({ success: true, data: messages });
+    const cursor = searchParams.get("cursor") ?? undefined;
+    const limit = Math.min(Number(searchParams.get("limit")) || 50, 200);
+    const result = await listMessages(conversationId, cursor, limit);
+    return NextResponse.json({ success: true, data: result.messages, hasMore: result.hasMore });
   } catch (error) {
     return errorResponse(error, "Failed to list messages");
   }

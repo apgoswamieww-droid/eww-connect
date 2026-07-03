@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { signupUser } from "../app/auth/auth";
-import { createConversation, listMessages, sendMessage } from "../app/chat/chat";
+import { createConversation, listMessages, sendMessage } from "../app/lib/data/chat";
 
 test("conversation creation and messaging work for participants", async () => {
   const firstEmail = `chat-${Date.now()}-a@example.com`;
@@ -26,9 +26,9 @@ test("conversation creation and messaging work for participants", async () => {
     content: "Hello from the test",
   });
 
-  const messages = await listMessages(conversation.id);
+  const result = await listMessages(conversation.id);
 
   assert.equal(conversation.isGroup, false);
   assert.equal(message.content, "Hello from the test");
-  assert.equal(messages.length, 1);
+  assert.equal(result.messages.length, 1);
 });

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import prisma from "../app/lib/prisma";
 import { signupUser } from "../app/auth/auth";
-import { createAttachmentRecord, listAttachments } from "../app/files/files";
+import { createAttachmentRecord, listAttachments } from "../app/lib/data/files";
 
 test("attachments can be recorded and listed for a message", async () => {
   const user = await signupUser({

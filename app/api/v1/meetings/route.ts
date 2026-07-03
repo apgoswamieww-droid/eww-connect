@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createMeeting, listMeetings } from "../../../meetings/meetings";
+import { createMeeting, listMeetings } from "../../../lib/data/meetings";
 import {
   errorResponse,
   requireAuth,

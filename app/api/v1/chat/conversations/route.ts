@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createConversation, listConversations } from "../../../../chat/chat";
+import { createConversation, listConversations } from "../../../../lib/data/chat";
 import { errorResponse, requireAuth, requireUsersInOrganization } from "../../../../lib/apiAuth";
 
 export async function GET(request: Request) {

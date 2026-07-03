@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import prisma from "../app/lib/prisma";
 import { signupUser } from "../app/auth/auth";
-import { createMeeting, listMeetings } from "../app/meetings/meetings";
+import { createMeeting, listMeetings } from "../app/lib/data/meetings";
 
 test("meetings can be created and listed for an organization", async () => {
   const user = await signupUser({

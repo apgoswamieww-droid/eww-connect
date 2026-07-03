@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { signupUser } from "../app/auth/auth";
-import { createNotification, listNotifications, markNotificationRead } from "../app/notifications/notifications";
+import { createNotification, listNotifications, markNotificationRead } from "../app/lib/data/notifications";
 
 test("notifications can be created, listed, and marked as read", async () => {
   const user = await signupUser({

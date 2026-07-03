@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { signupUser } from "../app/auth/auth";
-import { createConversation } from "../app/chat/chat";
+import { createConversation } from "../app/lib/data/chat";
 import { GET as getMessages } from "../app/api/v1/chat/messages/route";
 import {
   GET as getReminders,
