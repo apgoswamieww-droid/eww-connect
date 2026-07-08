@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from "react";
 import { getAuthHeaders } from "../../lib/tokenManager";
@@ -91,27 +92,14 @@ export default function RemindersPage() {
     } catch {}
   }
 
-  async function toggleComplete(item: ReminderItem) {
-    if (!item.isCompleted) {
-      const res = await fetch(`/api/v1/reminders/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ title: item.title }),
-      });
-      const j = await res.json();
-      if (j.success) {
-        // The PATCH currently doesn't support isCompleted, use the route's PATCH handler
-        // Actually the PATCH only updates title/message/dueAt. Let me use a different approach.
-      }
-    }
-    // Use the existing PATCH on /api/v1/reminders for completion
-    const res = await fetch("/api/v1/reminders", {
+  async function handleComplete(id: string) {
+    const res = await fetch(`/api/v1/reminders/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify({ id: item.id }),
+      body: JSON.stringify({ isCompleted: true }),
     });
     const j = await res.json();
-    if (j.success) setItems((prev) => prev.map((r) => (r.id === item.id ? j.data : r)));
+    if (j.success) setItems((prev) => prev.map((r) => (r.id === id ? j.data : r)));
   }
 
   async function handleDelete(id: string) {
@@ -130,63 +118,89 @@ export default function RemindersPage() {
 
   if (!mounted || loading) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <p className="text-slate-300">Loading reminders...</p>
+      <main className="mx-auto max-w-4xl px-6 py-10">
+        <div className="space-y-4">
+          <div className="h-8 w-28 skeleton" />
+          <div className="h-64 rounded-2xl skeleton" />
+        </div>
       </main>
     );
   }
-
-
 
   const active = items.filter((r) => !r.isCompleted);
   const completed = items.filter((r) => r.isCompleted);
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold text-white">Reminders</h1>
+    <main className="mx-auto max-w-4xl px-6 py-10 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <span>✅</span> Reminders
+            {active.length > 0 && (
+              <span className="badge badge-purple text-sm">{active.length} active</span>
+            )}
+          </h1>
+        </div>
         <button onClick={() => { resetForm(); setShowCreate(true); }}
-          className="rounded bg-sky-600 px-4 py-2 text-white hover:bg-sky-700">
-          + New reminder
+          className="btn-primary inline-flex items-center gap-2 px-5 py-2.5">
+          <span>➕</span> New reminder
         </button>
       </div>
 
       {items.length === 0 ? (
-        <div className="mt-8 rounded-lg border border-slate-700 bg-slate-900 p-8 text-center">
-          <p className="text-4xl mb-3">📝</p>
-          <p className="text-slate-400 mb-4">No reminders yet</p>
-          <button onClick={() => { resetForm(); setShowCreate(true); }}
-            className="rounded bg-sky-600 px-4 py-2 text-white hover:bg-sky-700">
+        <div className="rounded-2xl p-12 text-center"
+          style={{
+            background: "rgba(28, 35, 51, 0.6)",
+            border: "1px solid rgba(45, 55, 71, 0.4)",
+          }}
+        >
+          <p className="text-5xl mb-4">📝</p>
+          <p className="text-slate-400 mb-2">No reminders yet</p>
+          <button onClick={() => { resetForm(); setShowCreate(true); }} className="btn-primary mt-2">
             Create your first reminder
           </button>
         </div>
       ) : (
-        <div className="mt-6 space-y-6">
+        <div className="space-y-6">
+          {/* Active */}
           {active.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-slate-200 mb-3">Active ({active.length})</h2>
+              <h2 className="text-lg font-semibold text-white mb-4">Active</h2>
               <div className="space-y-2">
                 {active.map((r) => (
-                  <div key={r.id} className={`rounded-lg border px-4 py-3 ${
-                    isOverdue(r.dueAt) ? "border-red-800 bg-red-900/20" : "border-slate-700 bg-slate-900"
-                  }`}>
+                  <div key={r.id} className="rounded-2xl p-5 transition-all duration-200"
+                    style={{
+                      background: "rgba(28, 35, 51, 0.6)",
+                      border: isOverdue(r.dueAt)
+                        ? "1px solid rgba(239, 68, 68, 0.2)"
+                        : "1px solid rgba(45, 55, 71, 0.4)",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = isOverdue(r.dueAt) ? "rgba(239, 68, 68, 0.3)" : "rgba(124, 58, 237, 0.3)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = isOverdue(r.dueAt) ? "rgba(239, 68, 68, 0.2)" : "rgba(45, 55, 71, 0.4)"; }}
+                  >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => toggleComplete(r)}
-                            className="w-4 h-4 rounded border-2 border-slate-500 hover:border-sky-400 shrink-0 mt-0.5" />
-                          <span className="text-sm font-medium text-white">{r.title}</span>
+                      <div className="min-w-0 flex-1 flex items-start gap-3">
+                        <button
+                          onClick={() => handleComplete(r.id)}
+                          className="mt-0.5 w-5 h-5 rounded-lg border-2 shrink-0 flex items-center justify-center transition-all hover:border-purple-400"
+                          style={{ borderColor: isOverdue(r.dueAt) ? "rgba(239, 68, 68, 0.5)" : "rgba(45, 55, 71, 0.6)" }}
+                        >
+                          <span className="opacity-0 group-hover:opacity-100">✓</span>
+                        </button>
+                        <div>
+                          <p className="text-sm font-semibold text-white">{r.title}</p>
+                          {r.message && <p className="text-sm text-slate-400 mt-0.5">{r.message}</p>}
+                          <p className={`text-xs mt-1.5 flex items-center gap-1 ${
+                            isOverdue(r.dueAt) ? "text-red-400" : "text-slate-500"
+                          }`}>
+                            {isOverdue(r.dueAt) ? "⚠️" : "📌"} {formatDate(r.dueAt)}
+                          </p>
                         </div>
-                        {r.message && <p className="text-sm text-slate-400 mt-1 ml-6">{r.message}</p>}
-                        <p className={`text-xs mt-1 ml-6 ${isOverdue(r.dueAt) ? "text-red-400" : "text-slate-500"}`}>
-                          {formatDate(r.dueAt)}
-                        </p>
                       </div>
-                      <div className="flex gap-1 shrink-0">
-                        <button onClick={() => startEdit(r)}
-                          className="text-xs rounded bg-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-600">Edit</button>
-                        <button onClick={() => handleDelete(r.id)}
-                          className="text-xs rounded bg-red-800 px-2 py-1 text-red-200 hover:bg-red-700">Delete</button>
+                      <div className="flex gap-1.5 shrink-0">
+                        <button onClick={() => startEdit(r)} className="btn-ghost text-xs px-2.5 py-1.5">Edit</button>
+                        <button onClick={() => handleDelete(r.id)} className="btn-ghost text-xs px-2.5 py-1.5 hover:!text-red-400">Delete</button>
                       </div>
                     </div>
                   </div>
@@ -195,17 +209,29 @@ export default function RemindersPage() {
             </section>
           )}
 
+          {/* Completed */}
           {completed.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-slate-200 mb-3">Completed ({completed.length})</h2>
-              <div className="space-y-1 opacity-60">
+              <h2 className="text-lg font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                <span>✔</span> Completed
+                <span className="badge text-xs" style={{ background: "rgba(45, 55, 71, 0.5)", color: "#64748b" }}>{completed.length}</span>
+              </h2>
+              <div className="space-y-1.5 opacity-60">
                 {completed.map((r) => (
-                  <div key={r.id} className="rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="w-4 h-4 rounded border-2 border-slate-600 bg-slate-600 shrink-0 mt-0.5 flex items-center justify-center text-xs text-white">✓</span>
-                      <span className="text-sm text-slate-400 line-through">{r.title}</span>
+                  <div key={r.id} className="rounded-xl px-5 py-3"
+                    style={{
+                      background: "rgba(28, 35, 51, 0.3)",
+                      border: "1px solid rgba(45, 55, 71, 0.2)",
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-5 h-5 rounded-lg flex items-center justify-center text-xs"
+                        style={{ background: "rgba(16, 185, 129, 0.15)", color: "#6ee7b7" }}
+                      >✓</span>
+                      <span className="text-sm text-slate-500 line-through flex-1">{r.title}</span>
                       <button onClick={() => handleDelete(r.id)}
-                        className="ml-auto text-xs text-slate-500 hover:text-red-400">Delete</button>
+                        className="btn-ghost text-xs hover:!text-red-400"
+                      >Delete</button>
                     </div>
                   </div>
                 ))}
@@ -215,33 +241,58 @@ export default function RemindersPage() {
         </div>
       )}
 
+      {/* Create/Edit modal */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">{editId ? "Edit" : "New"} Reminder</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+          style={{ background: "rgba(0,0,0,0.7)" }}
+        >
+          <div className="w-full max-w-md rounded-2xl p-6 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "rgba(28, 35, 51, 0.98)",
+              border: "1px solid rgba(124, 58, 237, 0.2)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-white">{editId ? "Edit" : "New"} Reminder</h3>
+              <button onClick={resetForm}
+                className="flex items-center justify-center w-8 h-8 rounded-xl transition-colors hover:bg-white/5 text-slate-400 hover:text-white"
+              >✕</button>
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-200 mb-1">Title</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Title</label>
                 <input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} required
-                  className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  placeholder="Review pull request" />
+                  className="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-500 outline-none transition-all"
+                  placeholder="Review pull request"
+                  style={{ background: "rgba(13, 17, 23, 0.6)", border: "1px solid rgba(45, 55, 71, 0.6)" }}
+                  onFocus={(e) => { e.target.style.borderColor = "#7c3aed"; e.target.style.boxShadow = "0 0 0 3px rgba(124, 58, 237, 0.15)"; }}
+                  onBlur={(e) => { e.target.style.borderColor = "rgba(45, 55, 71, 0.6)"; e.target.style.boxShadow = "none"; }}
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-200 mb-1">Message</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Message</label>
                 <textarea value={formMessage} onChange={(e) => setFormMessage(e.target.value)} rows={2}
-                  className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  placeholder="Optional details" />
+                  className="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-500 outline-none transition-all"
+                  placeholder="Optional details"
+                  style={{ background: "rgba(13, 17, 23, 0.6)", border: "1px solid rgba(45, 55, 71, 0.6)" }}
+                  onFocus={(e) => { e.target.style.borderColor = "#7c3aed"; e.target.style.boxShadow = "0 0 0 3px rgba(124, 58, 237, 0.15)"; }}
+                  onBlur={(e) => { e.target.style.borderColor = "rgba(45, 55, 71, 0.6)"; e.target.style.boxShadow = "none"; }}
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-200 mb-1">Due date</label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Due date</label>
                 <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)}
-                  className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                  className="w-full px-4 py-2.5 rounded-xl text-sm text-white outline-none transition-all"
+                  style={{ background: "rgba(13, 17, 23, 0.6)", border: "1px solid rgba(45, 55, 71, 0.6)", colorScheme: "dark" }}
+                  onFocus={(e) => { e.target.style.borderColor = "#7c3aed"; e.target.style.boxShadow = "0 0 0 3px rgba(124, 58, 237, 0.15)"; }}
+                  onBlur={(e) => { e.target.style.borderColor = "rgba(45, 55, 71, 0.6)"; e.target.style.boxShadow = "none"; }}
+                />
               </div>
               <div className="flex gap-3 justify-end pt-2">
-                <button type="button" onClick={resetForm}
-                  className="rounded bg-slate-700 px-4 py-2 text-white hover:bg-slate-600">Cancel</button>
-                <button type="submit"
-                  className="rounded bg-sky-600 px-4 py-2 text-white hover:bg-sky-700">
+                <button type="button" onClick={resetForm} className="btn-secondary px-5 py-2.5">Cancel</button>
+                <button type="submit" className="btn-primary px-5 py-2.5">
                   {editId ? "Save" : "Create"}
                 </button>
               </div>

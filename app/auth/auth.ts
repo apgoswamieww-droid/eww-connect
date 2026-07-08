@@ -10,10 +10,13 @@ const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET ?? "dev-refresh-se
 const ACCESS_TOKEN_EXPIRY = "1h";
 const REFRESH_TOKEN_EXPIRY = "30d";
 
+import { validateInviteToken, acceptInvite } from "../lib/data/invites";
+
 export const signupSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(8),
+  inviteToken: z.string().optional(),
 });
 
 export const loginSchema = z.object({
@@ -40,16 +43,28 @@ export async function signupUser(input: z.infer<typeof signupSchema>) {
   }
 
   const passwordHash = await bcrypt.hash(parsed.password, 10);
+
+  let organizationId: string;
+
+  if (parsed.inviteToken) {
+    // User is accepting an invitation — validate token and get org
+    const invite = await validateInviteToken(parsed.inviteToken);
+    organizationId = invite.organization.id;
+  } else {
+    // New standalone signup — create a new org
+    const org = await prisma.organization.create({
+      data: { name: `${parsed.name}'s Organization` },
+    });
+    organizationId = org.id;
+  }
+
   const user = await prisma.user.create({
     data: {
       name: parsed.name,
       email: parsed.email,
       passwordHash,
-      organization: {
-        create: {
-          name: `${parsed.name}'s Organization`,
-        },
-      },
+      organizationId,
+      role: parsed.inviteToken ? "EMPLOYEE" : "ADMIN",
     },
     select: {
       id: true,
@@ -59,6 +74,11 @@ export async function signupUser(input: z.infer<typeof signupSchema>) {
       createdAt: true,
     },
   });
+
+  // If invite token was used, mark it as accepted
+  if (parsed.inviteToken) {
+    await acceptInvite(parsed.inviteToken);
+  }
 
   const { accessToken, refreshToken } = generateTokens(user.id, user.email);
 

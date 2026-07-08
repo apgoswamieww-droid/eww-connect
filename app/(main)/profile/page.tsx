@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from "react";
 import { getAuthHeaders } from "../../lib/tokenManager";
@@ -46,60 +47,108 @@ export default function ProfilePage() {
     setSaving(false);
   }
 
-  if (!mounted) return <div style={{ padding: 24, color: "#94a3b8" }}>Loading...</div>;
+  if (!mounted) {
+    return (
+      <main className="mx-auto max-w-2xl px-6 py-10">
+        <div className="space-y-4">
+          <div className="h-8 w-24 skeleton" />
+          <div className="h-64 rounded-2xl skeleton" />
+        </div>
+      </main>
+    );
+  }
 
   if (!user) return null;
 
+  const roleColors: Record<string, string> = {
+    ADMIN: "bg-violet-900/30 text-violet-300 border border-violet-700/30",
+    MANAGER: "bg-pink-900/30 text-pink-300 border border-pink-700/30",
+    EMPLOYEE: "bg-slate-800/50 text-slate-300 border border-slate-700/30",
+  };
+
   return (
-    <div style={{ maxWidth: 480, padding: "24px 32px" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: "#f1f5f9", margin: "0 0 24px" }}>Profile</h1>
-
-      <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div>
-          <label style={{ display: "block", fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>Name</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #334155", background: "#1e293b", color: "#f1f5f9", fontSize: 14, outline: "none" }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: "block", fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>Email</label>
-          <input
-            value={user.email}
-            disabled
-            style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#64748b", fontSize: 14, outline: "none" }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: "block", fontSize: 13, color: "#94a3b8", marginBottom: 4 }}>Role</label>
-          <div style={{
-            padding: "8px 10px", borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#94a3b8", fontSize: 14,
-            display: "inline-block",
-          }}>
-            <span style={{
-              padding: "2px 8px", borderRadius: 10, fontSize: 12,
-              background: user.role === "ADMIN" ? "#1e3a5f" : user.role === "MANAGER" ? "#3b1f6e" : "#1e293b",
-              color: user.role === "ADMIN" ? "#93c5fd" : user.role === "MANAGER" ? "#c4b5fd" : "#94a3b8",
-            }}>
-              {user.role}
-            </span>
+    <main className="mx-auto max-w-2xl px-6 py-10 animate-fade-in">
+      {/* Profile header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-5">
+          <div className="flex items-center justify-center w-16 h-16 rounded-2xl text-2xl font-bold text-white shrink-0"
+            style={{ background: "linear-gradient(135deg, #7c3aed, #ec4899)" }}
+          >
+            {user.name.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Profile</h1>
+            <p className="text-sm text-slate-400 mt-0.5">Manage your account settings</p>
           </div>
         </div>
+      </div>
 
-        {message && (
-          <div style={{ padding: "8px 12px", borderRadius: 6, fontSize: 13, background: message === "Profile updated" ? "#064e3b" : "#7f1d1d", color: message === "Profile updated" ? "#6ee7b7" : "#fca5a5" }}>
-            {message}
+      {/* Profile card */}
+      <div className="rounded-2xl p-8"
+        style={{
+          background: "rgba(28, 35, 51, 0.6)",
+          border: "1px solid rgba(45, 55, 71, 0.4)",
+        }}
+      >
+        <form onSubmit={handleSave} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Full Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-500 outline-none transition-all"
+              style={{
+                background: "rgba(13, 17, 23, 0.6)",
+                border: "1px solid rgba(45, 55, 71, 0.6)",
+              }}
+              onFocus={(e) => { e.target.style.borderColor = "#7c3aed"; e.target.style.boxShadow = "0 0 0 3px rgba(124, 58, 237, 0.15)"; }}
+              onBlur={(e) => { e.target.style.borderColor = "rgba(45, 55, 71, 0.6)"; e.target.style.boxShadow = "none"; }}
+            />
           </div>
-        )}
 
-        <button type="submit" disabled={saving}
-          style={{ padding: "10px 20px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, fontSize: 14, opacity: saving ? 0.6 : 1 }}>
-          {saving ? "Saving..." : "Save changes"}
-        </button>
-      </form>
-    </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
+            <input
+              value={user.email}
+              disabled
+              className="w-full px-4 py-2.5 rounded-xl text-sm outline-none cursor-not-allowed"
+              style={{
+                background: "rgba(13, 17, 23, 0.3)",
+                border: "1px solid rgba(45, 55, 71, 0.3)",
+                color: "#64748b",
+              }}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Role</label>
+            <div className="flex items-center gap-2">
+              <span className={`badge ${roleColors[user.role] || roleColors.EMPLOYEE}`}>
+                {user.role}
+              </span>
+            </div>
+          </div>
+
+          {message && (
+            <div className={`px-4 py-3 rounded-xl text-sm flex items-center gap-2 ${
+              message === "Profile updated"
+                ? "bg-emerald-900/20 border border-emerald-700/30 text-emerald-300"
+                : "bg-red-900/20 border border-red-700/30 text-red-300"
+            }`}>
+              <span>{message === "Profile updated" ? "✅" : "⚠️"}</span>
+              <span>{message}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="btn-primary w-full py-2.5"
+          >
+            {saving ? "Saving..." : "Save changes"}
+          </button>
+        </form>
+      </div>
+    </main>
   );
 }

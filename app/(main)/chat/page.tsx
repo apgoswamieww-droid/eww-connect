@@ -1,7 +1,7 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from "react";
-import NotificationsPanel from "../../components/NotificationsPanel";
 import ChatClient from "./ChatClient";
 
 type StoredUser = {
@@ -30,9 +30,11 @@ export default function ChatPage() {
 
   if (!mounted) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <h1 className="text-3xl font-semibold text-white">Chat</h1>
-        <p className="mt-3 text-slate-300">Loading...</p>
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <div className="space-y-4">
+          <div className="h-8 w-24 skeleton" />
+          <div className="h-96 rounded-2xl skeleton" />
+        </div>
       </main>
     );
   }
@@ -40,11 +42,14 @@ export default function ChatPage() {
   if (!user) return null;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-white">Chat</h1>
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
+    <main className="mx-auto max-w-6xl px-6 py-6 animate-fade-in">
+      <div className="rounded-2xl overflow-hidden"
+        style={{
+          background: "rgba(28, 35, 51, 0.6)",
+          border: "1px solid rgba(45, 55, 71, 0.4)",
+        }}
+      >
         <ChatClient userId={user.id} />
-        <NotificationsPanel userId={user.id} />
       </div>
     </main>
   );

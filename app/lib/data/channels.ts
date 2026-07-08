@@ -15,6 +15,48 @@ export async function createTeam(input: { organizationId: string; name: string; 
       name: input.name,
       description: input.description,
     },
+    include: {
+      channels: true,
+    },
+  });
+}
+
+export async function pinMessage(channelId: string, messageId: string) {
+  return prisma.pinnedMessage.create({
+    data: { channelId, messageId },
+    include: {
+      message: {
+        include: {
+          sender: { select: { id: true, name: true } },
+          reactions: {
+            include: { user: { select: { id: true, name: true } } },
+          },
+        },
+      },
+    },
+  });
+}
+
+export async function unpinMessage(channelId: string, messageId: string) {
+  await prisma.pinnedMessage.deleteMany({
+    where: { channelId, messageId },
+  });
+}
+
+export async function listPinnedMessages(channelId: string) {
+  return prisma.pinnedMessage.findMany({
+    where: { channelId },
+    include: {
+      message: {
+        include: {
+          sender: { select: { id: true, name: true } },
+          reactions: {
+            include: { user: { select: { id: true, name: true } } },
+          },
+        },
+      },
+    },
+    orderBy: { pinnedAt: "desc" },
   });
 }
 

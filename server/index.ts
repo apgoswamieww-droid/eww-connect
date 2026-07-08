@@ -3,7 +3,7 @@ import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import prisma from "../app/lib/prisma.js";
 
-const port = Number(process.env.SOCKET_PORT ?? 4000);
+const port = Number(process.env.SOCKET_PORT ?? 3333);
 const origin = process.env.CLIENT_ORIGIN ?? "http://localhost:3000";
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret";
 

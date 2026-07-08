@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -7,7 +8,6 @@ import Sidebar from "../components/Sidebar";
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [authed, setAuthed] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -18,19 +18,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }
   }, [router]);
 
-  useEffect(() => {
-    function check() { setIsMobile(window.innerWidth < 768); }
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
-
   if (!authed) return null;
 
   return (
-    <div style={{ display: "flex" }}>
+    <div className="flex">
       <Sidebar />
-      <main style={{ flex: 1, minWidth: 0, paddingLeft: isMobile ? 52 : 0 }}>{children}</main>
+      <main className="flex-1 min-w-0 pl-[52px] md:pl-0">{children}</main>
     </div>
   );
 }

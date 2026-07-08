@@ -35,7 +35,7 @@ export async function markReminderCompleted(id: string) {
   });
 }
 
-export async function updateReminder(id: string, data: { title?: string; message?: string; dueAt?: Date | null }) {
+export async function updateReminder(id: string, data: { title?: string; message?: string; dueAt?: Date | null; isCompleted?: boolean }) {
   return prisma.reminder.update({
     where: { id },
     data,

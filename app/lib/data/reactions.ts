@@ -42,7 +42,7 @@ async function tryEmitReactionEvent(event: string, payload: ReactionPayload) {
       { expiresIn: "5m" },
     );
     const { io } = await import("socket.io-client");
-    const socket = io(process.env.SOCKET_URL ?? "http://localhost:4000", {
+    const socket = io(process.env.SOCKET_URL ?? "http://localhost:3333", {
       auth: { token },
       transports: ["websocket"],
       reconnection: false,

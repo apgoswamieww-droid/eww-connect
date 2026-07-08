@@ -21,6 +21,7 @@ model Organization {
   teams          Team[]
   meetings       Meeting[]
   conversations  Conversation[]
+  invites        Invite[]
 }
 
 model User {
@@ -42,6 +43,7 @@ model User {
   notifications     Notification[]
   reminders         Reminder[]
   reactions         MessageReaction[]
+  createdInvites    Invite[]
 }
 
 enum UserRole {
@@ -223,4 +225,27 @@ model Reminder {
   createdAt    DateTime  @default(now())
 
   @@index([userId, isCompleted])
+}
+
+model Invite {
+  id             String       @id @default(cuid())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  email          String
+  token          String       @unique
+  createdBy      User         @relation(fields: [createdById], references: [id])
+  createdById    String
+  status         InviteStatus @default(PENDING)
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  acceptedAt     DateTime?
+
+  @@index([token])
+  @@index([organizationId])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
 }

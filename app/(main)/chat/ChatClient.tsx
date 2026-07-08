@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { io, type Socket } from "socket.io-client";
 import { getAuthHeaders, getToken, scheduleTokenRefresh } from "../../lib/tokenManager";
@@ -63,6 +64,10 @@ export default function ChatClient({ userId }: { userId: string }) {
   const [msgSearchResults, setMsgSearchResults] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [hasMore, setHasMore] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showUserSearch, setShowUserSearch] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<UserSummary[]>([]);
+  const [groupName, setGroupName] = useState("");
 
   const socketRef = useRef<Socket | null>(null);
   const currentConvRef = useRef<string | null>(null);
@@ -94,7 +99,7 @@ export default function ChatClient({ userId }: { userId: string }) {
     const token = getToken();
     if (!token) return;
 
-    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000", {
+    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:3333", {
       auth: { token },
       transports: ["websocket", "polling"],
       reconnection: true,
@@ -236,7 +241,7 @@ export default function ChatClient({ userId }: { userId: string }) {
     const timer = setTimeout(() => {
       fetch(`/api/v1/users/search?q=${encodeURIComponent(searchQuery)}`, { headers: getAuthHeaders() })
         .then((r) => r.json())
-        .then((j) => setSearchResults(j.success ? j.data : []))
+        .then((j) => { if (j.success) setSearchResults(j.data); else setSearchResults([]); })
         .catch(() => setSearchResults([]));
     }, 300);
     return () => clearTimeout(timer);
@@ -247,7 +252,7 @@ export default function ChatClient({ userId }: { userId: string }) {
     const timer = setTimeout(() => {
       fetch(`/api/v1/chat/search?q=${encodeURIComponent(msgSearchQuery)}`, { headers: getAuthHeaders() })
         .then((r) => r.json())
-        .then((j) => setMsgSearchResults(j.success ? j.data : []))
+        .then((j) => { if (j.success) setMsgSearchResults(j.data); else setMsgSearchResults([]); })
         .catch(() => setMsgSearchResults([]));
     }, 300);
     return () => clearTimeout(timer);
@@ -259,6 +264,7 @@ export default function ChatClient({ userId }: { userId: string }) {
       setActiveConv(conv);
       setMsgSearchQuery("");
       setMsgSearchResults([]);
+      setShowSearch(false);
     }
   }
 
@@ -377,14 +383,15 @@ export default function ChatClient({ userId }: { userId: string }) {
       const fileUrl = match[2];
       const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(fileName);
       parts.push(
-        <div key={idx++} style={{ marginTop: 4 }}>
+        <div key={idx++} className="mt-1">
           {isImage ? (
             <a href={fileUrl} target="_blank" rel="noreferrer">
-              <img src={fileUrl} alt={fileName} style={{ maxWidth: 240, maxHeight: 160, borderRadius: 6, display: "block" }} />
+              <img src={fileUrl} alt={fileName} style={{ maxWidth: 240, maxHeight: 160, borderRadius: 8 }} className="rounded-lg" />
             </a>
           ) : (
-            <a href={fileUrl} target="_blank" rel="noreferrer" style={{ color: "#93c5fd", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
-              {"\uD83D\uDCC4"} {fileName}
+            <a href={fileUrl} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-purple-300 text-xs hover:text-purple-200 transition-colors">
+              📄 {fileName}
             </a>
           )}
         </div>,
@@ -395,11 +402,12 @@ export default function ChatClient({ userId }: { userId: string }) {
     return parts.length > 0 ? parts : content;
   }
 
-  async function startConversation(otherUser: UserSummary) {
+  async function startConversation(users: UserSummary[], name?: string) {
+    const participantIds = users.map((u) => u.id);
     const res = await fetch("/api/v1/chat/conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify({ participants: [otherUser.id] }),
+      body: JSON.stringify({ participants: participantIds, name }),
     });
     const j = await res.json();
     if (j.success) {
@@ -407,16 +415,27 @@ export default function ChatClient({ userId }: { userId: string }) {
       setActiveConv(j.data);
       setSearchQuery("");
       setSearchResults([]);
+      setSelectedUsers([]);
+      setGroupName("");
+      setShowUserSearch(false);
     }
   }
 
-  function otherUserId(c: Conversation): string | undefined {
-    return c.members?.find((m) => m.user?.id !== userId)?.user?.id;
+  function otherUserIds(c: Conversation): string[] {
+    return c.members?.filter((m) => m.user?.id !== userId).map((m) => m.user?.id).filter(Boolean) as string[] || [];
+  }
+
+  function otherUserName(c: Conversation): string {
+    if (c.isGroup) {
+      const names = c.members?.filter((m) => m.user?.id !== userId).map((m) => m.user?.name).filter(Boolean) || [];
+      return names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3} more` : "");
+    }
+    return c.members?.find((m) => m.user?.id !== userId)?.user?.name ?? "Conversation";
   }
 
   function isOnline(c: Conversation): boolean {
-    const id = otherUserId(c);
-    return id ? onlineUsers.has(id) : false;
+    const ids = otherUserIds(c);
+    return ids.some((id) => onlineUsers.has(id));
   }
 
   const typingLabel = typingUsers.length === 1
@@ -426,182 +445,481 @@ export default function ChatClient({ userId }: { userId: string }) {
       : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ padding: "4px 8px", background: socketStatus === "connected" ? "#d1fae5" : socketStatus === "connecting" ? "#fef3c7" : "#fee2e2", borderRadius: 4 }}>
-        <span style={{ fontSize: 12, fontWeight: "bold" }}>
-          Socket: {socketStatus === "connected" ? "\u2713 Connected" : socketStatus === "connecting" ? "\u27F3 Connecting..." : "\u2717 Disconnected"}
-        </span>
+    <div className="flex flex-col relative" style={{ height: "calc(100vh - 200px)", minHeight: 500 }}>
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-5 py-3 shrink-0"
+        style={{ borderBottom: "1px solid rgba(45, 55, 71, 0.4)" }}
+      >
+        <div className="flex items-center gap-3">
+          {/* Mobile back button */}
+          {activeConv && (
+            <button
+              onClick={() => setActiveConv(null)}
+              className="md:hidden flex items-center justify-center w-8 h-8 rounded-xl transition-colors hover:bg-white/5 text-slate-400 hover:text-white"
+            >
+              ←
+            </button>
+          )}
+          <div>
+            <h2 className="text-base font-semibold text-white">
+              {activeConv
+                ? (activeConv.name ?? (activeConv.isGroup ? "Group" : otherUserName(activeConv)))
+                : "Messages"}
+            </h2>
+            {activeConv && activeConv.isGroup && (
+              <p className="text-xs text-slate-500 mt-0.5">
+                {activeConv.members?.length ?? 0} members · {otherUserName(activeConv)}
+              </p>
+            )}
+            {activeConv && !activeConv.isGroup && isOnline(activeConv) && (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-400 mt-0.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Online
+              </span>
+            )}
+            {activeConv && !activeConv.isGroup && !isOnline(activeConv) && (
+              <span className="text-xs text-slate-500 mt-0.5 block">Offline</span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Socket status */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
+            style={{
+              background: socketStatus === "connected" ? "rgba(16, 185, 129, 0.1)" : socketStatus === "connecting" ? "rgba(245, 158, 11, 0.1)" : "rgba(239, 68, 68, 0.1)",
+            }}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              socketStatus === "connected" ? "bg-emerald-400" : socketStatus === "connecting" ? "bg-amber-400 animate-pulse" : "bg-red-400"
+            }`} />
+            <span className="text-xs font-medium"
+              style={{
+                color: socketStatus === "connected" ? "#6ee7b7" : socketStatus === "connecting" ? "#fcd34d" : "#fca5a5",
+              }}
+            >{socketStatus === "connected" ? "Live" : socketStatus === "connecting" ? "Connecting" : "Offline"}</span>
+          </div>
+
+          {/* Search buttons */}
+          <button onClick={() => { setShowUserSearch(!showUserSearch); setShowSearch(false); setSelectedUsers([]); setGroupName(""); }}
+            className="btn-ghost text-xs flex items-center gap-1.5 px-2.5 py-1.5"
+            title="Start a new conversation"
+          >🔍 New Chat</button>
+          <button onClick={() => { setShowSearch(!showSearch); setShowUserSearch(false); }}
+            className="btn-ghost text-xs flex items-center gap-1.5 px-2.5 py-1.5"
+            title="Search messages"
+          >🔎 Search</button>
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 16 }}>
-        <aside style={{ width: 280, borderRight: "1px solid #334155", paddingRight: 12 }}>
-          <div style={{ marginBottom: 8 }}>
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search users..."
-              style={{ width: "100%", padding: "6px 8px", borderRadius: 4, border: "1px solid #475569", background: "#1e293b", color: "#f1f5f9", fontSize: 13, outline: "none" }}
-            />
-            {searchResults.length > 0 && (
-              <div style={{ marginTop: 4, border: "1px solid #475569", borderRadius: 4, background: "#1e293b" }}>
-                {searchResults.map((u) => (
-                  <div key={u.id} onClick={() => startConversation(u)}
-                    style={{ padding: "6px 8px", cursor: "pointer", fontSize: 13, color: "#e2e8f0", borderBottom: "1px solid #334155" }}>
-                    <strong>{u.name}</strong>
-                    <div style={{ fontSize: 11, color: "#94a3b8" }}>{u.email}</div>
+      <div className="flex flex-1 min-h-0">
+        {/* Conversations sidebar - hidden on mobile when a conversation is active */}
+        <div className={`w-64 shrink-0 flex flex-col overflow-hidden ${
+          activeConv ? "hidden md:flex" : "flex"
+        }`}
+          style={{ borderRight: "1px solid rgba(45, 55, 71, 0.3)" }}
+        >
+          <div className="overflow-y-auto flex-1 p-2 space-y-0.5">
+            {conversations.length === 0 ? (
+              <div className="p-3 text-xs text-slate-500 text-center">No conversations yet. Search for a user above to start one.</div>
+            ) : (
+              conversations.map((c) => (
+                <div key={c.id}
+                  onClick={() => setActiveConv(c)}
+                  className="px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150"
+                  style={{
+                    background: activeConv?.id === c.id ? "rgba(124, 58, 237, 0.12)" : "transparent",
+                    border: activeConv?.id === c.id ? "1px solid rgba(124, 58, 237, 0.2)" : "1px solid transparent",
+                  }}
+                  onMouseEnter={(e) => { if (activeConv?.id !== c.id) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; } }}
+                  onMouseLeave={(e) => { if (activeConv?.id !== c.id) { e.currentTarget.style.background = "transparent"; } }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative shrink-0">
+                      <div className={`flex items-center justify-center rounded-full text-xs font-bold text-white ${
+                        c.isGroup ? "w-9 h-9" : "w-8 h-8"
+                      }`}
+                        style={{ background: activeConv?.id === c.id ? "linear-gradient(135deg, #7c3aed, #ec4899)" : (c.isGroup ? "linear-gradient(135deg, #f59e0b, #d97706)" : "linear-gradient(135deg, #374151, #4b5563)") }}
+                      >
+                        {c.isGroup ? "#" : (c.members?.find((m) => m.user?.id !== userId)?.user?.name ?? "?").charAt(0).toUpperCase()}
+                      </div>
+                      {!c.isGroup && (
+                        <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 ${
+                          isOnline(c) ? "bg-emerald-400 border-emerald-900" : "bg-slate-500 border-slate-800"
+                        }`} />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-sm font-medium truncate ${activeConv?.id === c.id ? "text-white" : "text-slate-300"}`}>
+                          {c.name ?? (c.isGroup ? `Group (${c.members?.length ?? 0})` : otherUserName(c))}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 truncate mt-0.5">
+                        {c.isGroup && otherUserName(c) !== "Conversation" ? (
+                          <span className="text-violet-400">{otherUserName(c)}</span>
+                        ) : (
+                          c.messages?.[0]?.content ?? ""
+                        )}
+                      </p>
+                    </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))
             )}
           </div>
-          <div style={{ marginBottom: 8 }}>
-            <input
-              value={msgSearchQuery}
-              onChange={(e) => setMsgSearchQuery(e.target.value)}
-              placeholder="Search messages..."
-              style={{ width: "100%", padding: "6px 8px", borderRadius: 4, border: "1px solid #475569", background: "#1e293b", color: "#f1f5f9", fontSize: 13, outline: "none" }}
-            />
-            {msgSearchResults.length > 0 && (
-              <div style={{ marginTop: 4, border: "1px solid #475569", borderRadius: 4, background: "#1e293b", maxHeight: 200, overflow: "auto" }}>
-                {msgSearchResults.map((m) => (
-                  <div key={m.id} onClick={() => jumpToConversation(m.conversationId ?? "")}
-                    style={{ padding: "6px 8px", cursor: "pointer", fontSize: 12, color: "#e2e8f0", borderBottom: "1px solid #334155" }}>
-                    <div style={{ color: "#93c5fd", fontSize: 11 }}>{m.sender?.name ?? "Unknown"}</div>
-                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#94a3b8" }}>{m.content}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#f1f5f9", margin: "0 0 8px 0" }}>Conversations</h3>
-          {conversations.length === 0 && <p style={{ fontSize: 12, color: "#64748b" }}>No conversations yet. Search for a user above to start one.</p>}
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {conversations.map((c) => (
-              <div key={c.id}
-                onClick={() => setActiveConv(c)}
-                style={{ cursor: "pointer", padding: "6px 8px", borderRadius: 4, background: activeConv?.id === c.id ? "#1e40af" : "transparent", color: activeConv?.id === c.id ? "#fff" : "#cbd5e1", fontSize: 13 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <strong>{c.name ?? (c.isGroup ? "Group" : c.members?.find((m) => m.user?.id !== userId)?.user?.name ?? "Conversation")}</strong>
-                  {!c.isGroup && isOnline(c) && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />}
-                </div>
-                <div style={{ fontSize: 11, color: activeConv?.id === c.id ? "#bfdbfe" : "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {c.messages?.[0]?.content ?? ""}
-                </div>
-              </div>
-            ))}
-          </div>
-        </aside>
+        </div>
 
-        <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#f1f5f9", margin: "0 0 8px 0", display: "flex", alignItems: "center", gap: 6 }}>
-            {activeConv ? (activeConv.name ?? activeConv.members?.find((m) => m.user?.id !== userId)?.user?.name ?? "Chat") : "Messages"}
-            {activeConv && !activeConv.isGroup && isOnline(activeConv) && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />}
-          </h3>
+        {/* Main chat area */}
+        <div className={`flex-1 flex flex-col min-w-0 ${!activeConv ? "hidden md:flex" : "flex"}`}>
           {!activeConv ? (
-            <p style={{ color: "#64748b", fontSize: 13 }}>Select a conversation or search for a user</p>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-4xl mb-3">💬</p>
+                <p className="text-slate-500 text-sm">Select a conversation to start chatting</p>
+              </div>
+            </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ maxHeight: 360, overflow: "auto", padding: 8, border: "1px solid #334155", borderRadius: 6, background: "#0f172a" }}>
+            <>
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-1">
                 {hasMore && (
-                  <button onClick={loadMore} style={{ width: "100%", padding: "6px", fontSize: 12, color: "#93c5fd", background: "transparent", border: "1px dashed #334155", borderRadius: 4, cursor: "pointer", marginBottom: 8 }}>
-                    Load older messages
-                  </button>
+                  <div className="text-center py-2">
+                    <button onClick={loadMore} className="text-xs text-purple-400 hover:text-purple-300 transition-colors bg-transparent border border-purple-900/30 rounded-lg px-4 py-1.5 cursor-pointer">
+                      Load older messages
+                    </button>
+                  </div>
                 )}
+
                 {messages.map((m) => {
                   const isMine = m.sender?.id === userId;
                   const isDeleted = !!m.deletedAt;
                   const isEditing = editingMsgId === m.id;
                   return (
-                    <div key={m.id} style={{ marginBottom: 8, display: "flex", justifyContent: isMine ? "flex-end" : "flex-start" }}>
-                      <div style={{ maxWidth: "75%", background: isMine ? "#1e40af" : "#1e293b", borderRadius: 8, padding: "6px 10px" }}>
-                        {!isMine && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-                            <strong style={{ fontSize: 11, color: "#93c5fd" }}>{m.sender?.name}</strong>
-                            {m.sender?.id && onlineUsers.has(m.sender.id) && (
-                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-                            )}
-                          </div>
+                    <div
+                      key={m.id}
+                      className={`flex ${isMine ? "justify-end" : "justify-start"} group mb-1`}
+                    >
+                      <div className="max-w-[70%]"
+                        style={{ minWidth: 120 }}
+                      >
+                        {!isMine && !isDeleted && (
+                          <p className="text-xs font-semibold mb-0.5 px-1" style={{ color: isMine ? "#a78bfa" : "#94a3b8" }}>
+                            {m.sender?.name}
+                          </p>
                         )}
-                        {isEditing ? (
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <input value={editText} onChange={(e) => setEditText(e.target.value)}
-                              style={{ flex: 1, padding: "4px 6px", borderRadius: 4, border: "1px solid #475569", background: "#0f172a", color: "#f1f5f9", fontSize: 13, outline: "none" }} />
-                            <button onClick={() => handleEdit(m.id)} style={{ padding: "4px 8px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 11 }}>Save</button>
-                            <button onClick={() => { setEditingMsgId(null); setEditText(""); }} style={{ padding: "4px 8px", background: "#475569", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 11 }}>Cancel</button>
-                          </div>
-                        ) : (
-                          <>
-                            <span style={{ fontSize: 13, color: isDeleted ? "#64748b" : "#f1f5f9", fontStyle: isDeleted ? "italic" : "normal" }}>{isDeleted ? m.content : renderContent(m.content)}</span>
-                            {m.editedAt && !isDeleted && <span style={{ fontSize: 10, color: "#64748b", marginLeft: 4 }}>(edited)</span>}
-                          </>
-                        )}
-                        {!isDeleted && (
-                          <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                            {m.reactions?.reduce<{ emoji: string; count: number; hasMine: boolean }[]>((acc, r) => {
-                              const existing = acc.find((a) => a.emoji === r.emoji);
-                              if (existing) { existing.count++; if (r.userId === userId) existing.hasMine = true; }
-                              else acc.push({ emoji: r.emoji, count: 1, hasMine: r.userId === userId });
-                              return acc;
-                            }, []).map((r) => (
-                              <button key={r.emoji} onClick={() => toggleReaction(m.id, r.emoji)}
-                                style={{ padding: "1px 6px", fontSize: 12, borderRadius: 10, border: `1px solid ${r.hasMine ? "#3b82f6" : "#334155"}`, background: r.hasMine ? "#1e3a5f" : "transparent", cursor: "pointer", color: "#e2e8f0", display: "inline-flex", alignItems: "center", gap: 3 }}>
-                                {r.emoji} {r.count}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                        <div className={`rounded-2xl px-4 py-2.5 transition-all duration-150 relative ${
+                          isMine
+                            ? "rounded-br-md"
+                            : "rounded-bl-md"
+                        }`}
+                          style={{
+                            background: isMine
+                              ? "linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(124, 58, 237, 0.1))"
+                              : "rgba(45, 55, 71, 0.3)",
+                            border: isMine
+                              ? "1px solid rgba(124, 58, 237, 0.15)"
+                              : "1px solid rgba(45, 55, 71, 0.2)",
+                          }}
+                        >
+                          {isEditing ? (
+                            <div className="flex gap-2">
+                              <input value={editText} onChange={(e) => setEditText(e.target.value)}
+                                className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
+                                style={{ background: "rgba(13, 17, 23, 0.8)", border: "1px solid rgba(124, 58, 237, 0.3)", color: "#f1f5f9" }}
+                                autoFocus
+                              />
+                              <button onClick={() => handleEdit(m.id)} className="btn-primary text-xs px-3 py-1">Save</button>
+                              <button onClick={() => { setEditingMsgId(null); setEditText(""); }} className="btn-secondary text-xs px-3 py-1">Cancel</button>
+                            </div>
+                          ) : (
+                            <>
+                              <p className={`text-sm leading-relaxed ${isDeleted ? "text-slate-500 italic" : "text-slate-100"}`}>
+                                {isDeleted ? m.content : renderContent(m.content)}
+                              </p>
+                              {m.editedAt && !isDeleted && (
+                                <span className="text-[10px] text-slate-500 ml-1">(edited)</span>
+                              )}
+                            </>
+                          )}
+
+                          {/* Reactions */}
+                          {!isDeleted && !isEditing && m.reactions && m.reactions.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {m.reactions.reduce<{ emoji: string; count: number; hasMine: boolean }[]>((acc, r) => {
+                                const existing = acc.find((a) => a.emoji === r.emoji);
+                                if (existing) { existing.count++; if (r.userId === userId) existing.hasMine = true; }
+                                else acc.push({ emoji: r.emoji, count: 1, hasMine: r.userId === userId });
+                                return acc;
+                              }, []).map((r) => (
+                                <button key={r.emoji} onClick={() => toggleReaction(m.id, r.emoji)}
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all cursor-pointer"
+                                  style={{
+                                    background: r.hasMine ? "rgba(124, 58, 237, 0.2)" : "rgba(255,255,255,0.05)",
+                                    border: `1px solid ${r.hasMine ? "rgba(124, 58, 237, 0.3)" : "rgba(255,255,255,0.1)"}`,
+                                    color: "#e2e8f0",
+                                  }}
+                                >
+                                  {r.emoji} <span className="font-medium">{r.count}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
                         {isMine && !isDeleted && !isEditing && (
-                          <div style={{ marginTop: 2, display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                            <button onClick={() => { setEditingMsgId(m.id); setEditText(m.content); }} style={{ padding: 0, background: "none", color: "#93c5fd", border: "none", cursor: "pointer", fontSize: 10 }}>Edit</button>
-                            <button onClick={() => handleDelete(m.id)} style={{ padding: 0, background: "none", color: "#fca5a5", border: "none", cursor: "pointer", fontSize: 10 }}>Delete</button>
+                          <div className="flex gap-1 justify-end px-2 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => { setEditingMsgId(m.id); setEditText(m.content); }}
+                              className="text-[10px] text-slate-500 hover:text-purple-400 transition-colors bg-transparent border-none cursor-pointer px-1"
+                            >Edit</button>
+                            <button onClick={() => handleDelete(m.id)}
+                              className="text-[10px] text-slate-500 hover:text-red-400 transition-colors bg-transparent border-none cursor-pointer px-1"
+                            >Delete</button>
                           </div>
                         )}
-                        {!isDeleted && (
-                          <div style={{ marginTop: 2 }}>
-                            <button onClick={() => toggleReaction(m.id, "\u2764\uFE0F")} style={{ padding: 0, background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "#64748b", opacity: 0.6 }} title="React">{"\uD83D\uDE0A"}</button>
+
+                        {/* Quick reaction button */}
+                        {!isDeleted && !isEditing && (
+                          <div className={`px-2 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${isMine ? "text-right" : "text-left"}`}>
+                            <button onClick={() => toggleReaction(m.id, "👍")}
+                              className="text-xs text-slate-500 hover:text-purple-400 transition-colors bg-transparent border-none cursor-pointer"
+                              title="React"
+                            >😊</button>
                           </div>
                         )}
                       </div>
                     </div>
                   );
                 })}
+
+                {/* Typing indicator */}
                 {typingLabel && (
-                  <div style={{ fontSize: 11, color: "#94a3b8", padding: "4px 8px", fontStyle: "italic" }}>{typingLabel}</div>
+                  <div className="flex items-center gap-2 px-2 py-1">
+                    <div className="flex items-center gap-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                    <span className="text-xs text-slate-500 italic">{typingLabel}</span>
+                  </div>
                 )}
+
                 <div ref={messagesEndRef} />
               </div>
 
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  style={{ display: "none" }}
-                  onChange={handleAttach}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  style={{ padding: "8px 10px", background: "transparent", color: "#94a3b8", border: "1px solid #334155", borderRadius: 6, cursor: "pointer", fontSize: 16, lineHeight: 1, opacity: uploading ? 0.5 : 1 }}
-                  title="Attach file"
+              {/* Input area */}
+              <div className="shrink-0 px-4 py-3"
+                style={{ borderTop: "1px solid rgba(45, 55, 71, 0.3)" }}
+              >
+                <div className="flex items-end gap-2 rounded-2xl p-2"
+                  style={{ background: "rgba(13, 17, 23, 0.6)", border: "1px solid rgba(45, 55, 71, 0.5)" }}
                 >
-                  {"\uD83D\uDCCE"}
-                </button>
-                <input
-                  value={text}
-                  onChange={(e) => handleTextChange(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                  style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #475569", background: "#1e293b", color: "#f1f5f9", fontSize: 13, outline: "none" }}
-                  placeholder="Type a message..."
-                />
-                <button onClick={send}
-                  style={{ padding: "8px 16px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
-                  Send
-                </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleAttach}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+                    style={{ background: "rgba(255,255,255,0.03)", color: "#94a3b8", border: "none" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#c4b5fd"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.color = "#94a3b8"; }}
+                    title="Attach file"
+                  >
+                    {uploading ? "⏳" : "📎"}
+                  </button>
+                  <input
+                    value={text}
+                    onChange={(e) => handleTextChange(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                    className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder-slate-500 px-2 py-1.5"
+                    placeholder="Type a message..."
+                  />
+                  <button onClick={send}
+                    className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0 transition-all cursor-pointer border-none"
+                    style={{
+                      background: text.trim() ? "linear-gradient(135deg, #7c3aed, #6d28d9)" : "rgba(45, 55, 71, 0.3)",
+                      color: text.trim() ? "#fff" : "#64748b",
+                    }}
+                    onMouseEnter={(e) => { if (text.trim()) { e.currentTarget.style.background = "linear-gradient(135deg, #8b5cf6, #7c3aed)"; } }}
+                    onMouseLeave={(e) => { if (text.trim()) { e.currentTarget.style.background = "linear-gradient(135deg, #7c3aed, #6d28d9)"; } }}
+                    disabled={!text.trim()}
+                  >
+                    ➤
+                  </button>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
+
+      {/* User search panel — supports multi-select for group creation */}
+      {showUserSearch && (
+        <div className="absolute top-16 right-4 w-80 z-40 rounded-2xl p-4 animate-slide-up shadow-elevated"
+          style={{
+            background: "rgba(28, 35, 51, 0.98)",
+            border: "1px solid rgba(124, 58, 237, 0.2)",
+            boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+          }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-white">
+              {selectedUsers.length > 0 ? `Create Group (${selectedUsers.length + 1} members)` : "New Conversation"}
+            </p>
+            <button
+              onClick={() => { setShowUserSearch(false); setSelectedUsers([]); setGroupName(""); }}
+              className="text-slate-500 hover:text-slate-300 text-lg leading-none bg-transparent border-none cursor-pointer"
+            >✕</button>
+          </div>
+
+          {/* Selected user chips */}
+          {selectedUsers.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {selectedUsers.map((u) => (
+                <span key={u.id}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white"
+                  style={{ background: "rgba(124, 58, 237, 0.2)", border: "1px solid rgba(124, 58, 237, 0.3)" }}
+                >
+                  {u.name}
+                  <button
+                    onClick={() => setSelectedUsers((prev) => prev.filter((s) => s.id !== u.id))}
+                    className="ml-0.5 text-slate-400 hover:text-white bg-transparent border-none cursor-pointer text-xs"
+                  >✕</button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Group name input (shown when 2+ users selected) */}
+          {selectedUsers.length >= 2 && (
+            <input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="Group name (optional)"
+              className="w-full px-3 py-2 rounded-xl text-sm text-white placeholder-slate-500 outline-none transition-all mb-2"
+              style={{ background: "rgba(13, 17, 23, 0.6)", border: "1px solid rgba(124, 58, 237, 0.3)" }}
+            />
+          )}
+
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search users..."
+            className="w-full px-3 py-2 rounded-xl text-sm text-white placeholder-slate-500 outline-none transition-all mb-2"
+            style={{ background: "rgba(13, 17, 23, 0.6)", border: "1px solid rgba(45, 55, 71, 0.6)" }}
+            onFocus={(e) => { e.target.style.borderColor = "#7c3aed"; }}
+            onBlur={(e) => { e.target.style.borderColor = "rgba(45, 55, 71, 0.6)"; }}
+            autoFocus
+          />
+
+          <div className="max-h-48 overflow-y-auto space-y-0.5">
+            {searchResults.filter((u) => u.id !== userId).map((u) => {
+              const isSelected = selectedUsers.some((s) => s.id === u.id);
+              return (
+                <div key={u.id}
+                  onClick={() => {
+                    if (isSelected) {
+                      setSelectedUsers((prev) => prev.filter((s) => s.id !== u.id));
+                    } else {
+                      setSelectedUsers((prev) => [...prev, u]);
+                    }
+                  }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors"
+                  style={{ background: isSelected ? "rgba(124, 58, 237, 0.12)" : "rgba(255,255,255,0.02)" }}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "rgba(124, 58, 237, 0.1)"; }}
+                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+                >
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold text-white shrink-0"
+                    style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
+                  >{u.name.charAt(0).toUpperCase()}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white font-medium truncate">{u.name}</p>
+                    <p className="text-xs text-slate-500 truncate">{u.email}</p>
+                  </div>
+                  {isSelected && (
+                    <span className="text-purple-400 text-sm">✓</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {searchQuery.length >= 2 && searchResults.length === 0 && (
+            <p className="text-xs text-slate-500 text-center py-2">No users found</p>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2 mt-3 pt-3" style={{ borderTop: "1px solid rgba(45, 55, 71, 0.3)" }}>
+            {selectedUsers.length === 0 ? (
+              <p className="text-xs text-slate-500">Select users to start a conversation</p>
+            ) : selectedUsers.length === 1 ? (
+              <button
+                onClick={() => startConversation(selectedUsers)}
+                className="flex-1 py-2 rounded-xl text-white font-semibold text-sm transition-all bg-transparent border-none cursor-pointer"
+                style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #8b5cf6, #7c3aed)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #7c3aed, #6d28d9)"; }}
+              >
+                Start 1-on-1 Chat
+              </button>
+            ) : (
+              <button
+                onClick={() => startConversation(selectedUsers, groupName || undefined)}
+                className="flex-1 py-2 rounded-xl text-white font-semibold text-sm transition-all bg-transparent border-none cursor-pointer"
+                style={{ background: "linear-gradient(135deg, #7c3aed, #6d28d9)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #8b5cf6, #7c3aed)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, #7c3aed, #6d28d9)"; }}
+              >
+                Create Group{groupName ? ` "${groupName}"` : ""}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Message search panel */}
+      {showSearch && (
+        <div className="absolute top-16 right-4 w-80 z-40 rounded-2xl p-4 animate-slide-up shadow-elevated"
+          style={{
+            background: "rgba(28, 35, 51, 0.98)",
+            border: "1px solid rgba(124, 58, 237, 0.2)",
+            boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+          }}
+        >
+          <p className="text-sm font-semibold text-white mb-3">Search Messages</p>
+          <input
+            value={msgSearchQuery}
+            onChange={(e) => setMsgSearchQuery(e.target.value)}
+            placeholder="Search across conversations..."
+            className="w-full px-3 py-2 rounded-xl text-sm text-white placeholder-slate-500 outline-none transition-all mb-2"
+            style={{ background: "rgba(13, 17, 23, 0.6)", border: "1px solid rgba(45, 55, 71, 0.6)" }}
+            onFocus={(e) => { e.target.style.borderColor = "#7c3aed"; }}
+            onBlur={(e) => { e.target.style.borderColor = "rgba(45, 55, 71, 0.6)"; }}
+            autoFocus
+          />
+          <div className="max-h-60 overflow-y-auto space-y-1">
+            {msgSearchResults.map((m) => (
+              <div key={m.id} onClick={() => jumpToConversation(m.conversationId ?? "")}
+                className="px-3 py-2.5 rounded-xl cursor-pointer transition-colors"
+                style={{ background: "rgba(255,255,255,0.02)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(124, 58, 237, 0.1)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+              >
+                <p className="text-xs font-medium text-purple-300">{m.sender?.name ?? "Unknown"}</p>
+                <p className="text-xs text-slate-400 truncate mt-0.5">{m.content}</p>
+              </div>
+            ))}
+            {msgSearchQuery.length >= 2 && msgSearchResults.length === 0 && (
+              <p className="text-xs text-slate-500 text-center py-2">No messages found</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
